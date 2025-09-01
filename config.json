@@ -1,0 +1,56 @@
+{
+    "camera_index": 2,
+    "line_thickness": 2,
+    "saved_confirmation_duration_sec": 2,
+    "pi_id": "PI001",
+    "city": "manila",
+    "toda_id": "bltmpc",
+    "etrike_id": "00001",
+    "location": "Main Terminal",
+    "colors": {
+        "exit_red": [
+            0,
+            0,
+            255
+        ],
+        "inside_green": [
+            0,
+            100,
+            0
+        ],
+        "person_id_green": [
+            0,
+            255,
+            0
+        ],
+        "info_text_white": [
+            255,
+            255,
+            255
+        ],
+        "hover_yellow": [
+            0,
+            255,
+            255
+        ],
+        "shadow_line_gray": [
+            200,
+            200,
+            200
+        ],
+        "adult_text_blue": [
+            255,
+            0,
+            0
+        ],
+        "child_text_orange": [
+            0,
+            165,
+            255
+        ]
+    },
+    "side_margin": 62,
+    "bottom_margin": 56,
+    "flip_horizontal": true,
+    "flip_vertical": true
+}

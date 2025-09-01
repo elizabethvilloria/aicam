@@ -1,0 +1,26 @@
+[
+    {
+        "person_id": 2,
+        "type": "Adult",
+        "entry_timestamp": 1756728972.010591,
+        "exit_timestamp": 1756728973.003882,
+        "dwell_time_minutes": 0.0,
+        "pi_id": "PI001",
+        "city": "manila",
+        "toda_id": "bltmpc",
+        "etrike_id": "00001",
+        "location": "Main Terminal"
+    },
+    {
+        "person_id": 5,
+        "type": "Child",
+        "entry_timestamp": 1756728973.929319,
+        "exit_timestamp": null,
+        "dwell_time_minutes": null,
+        "pi_id": "PI001",
+        "city": "manila",
+        "toda_id": "bltmpc",
+        "etrike_id": "00001",
+        "location": "Main Terminal"
+    }
+]

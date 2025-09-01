@@ -1,0 +1,23 @@
+# Core AI and Computer Vision
+ultralytics==8.3.184
+torch==2.8.0
+torchvision==0.23.0
+opencv-python>=4.8.0
+
+# Tracking and Filtering
+lapx>=0.5.0
+filterpy>=1.4.5
+
+# Camera
+picamera2>=0.3.0
+Pillow>=10.0.0
+
+# Web Framework and Sync
+flask>=2.3.0
+flask-socketio>=5.5.1
+requests>=2.31.0
+
+# Data handling
+numpy>=1.24.0
+pandas>=2.3.2
+python-dotenv>=0.21.0
