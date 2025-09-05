@@ -517,7 +517,7 @@ def run_detection(model):
                 device="cpu",
                 tracker="bytetrack.yaml",
                 imgsz=320,
-                conf=0.5,
+                conf=0.7,
                 max_det=10
             )
             did_infer = True
@@ -526,6 +526,7 @@ def run_detection(model):
                 boxes = results[0].boxes.xywh.cpu()
                 track_ids = results[0].boxes.id.int().cpu().tolist()
                 all_keypoints = results[0].keypoints.xy.cpu().numpy()
+                confidences = results[0].boxes.conf.cpu().numpy()
                 new_boxes = []
                 for i, person_keypoints in enumerate(all_keypoints):
                     person_id = track_ids[i]
@@ -596,11 +597,24 @@ def run_detection(model):
                 # Save caches after processing all people this frame
                 latest_boxes = new_boxes
                 last_passengers_in_trike_count = passengers_in_trike_count
+                
+                # Update last detection frame
+                run_detection.last_detection_frame = frame_idx
+            else:
+                pass  # No detections this frame
 
         # If we skipped inference this frame, draw last known boxes to avoid flicker
         if not did_infer and latest_boxes:
-            for (sp, ep) in latest_boxes:
-                cv2.rectangle(frame, sp, ep, (255, 0, 255), 2)
+            # Only draw boxes for 1 frame after detection stops
+            if not hasattr(run_detection, 'last_detection_frame'):
+                run_detection.last_detection_frame = 0
+            
+            if frame_idx - run_detection.last_detection_frame < 2:  # Only 2 frames
+                for (sp, ep) in latest_boxes:
+                    cv2.rectangle(frame, sp, ep, (255, 0, 255), 2)
+            else:
+                # Clear boxes if no detection for 2+ frames
+                latest_boxes = []
 
         # --- Draw Zones ---
         side_margin = shared_state['side_margin'] # Use updated margin
