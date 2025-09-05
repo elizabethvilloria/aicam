@@ -420,6 +420,8 @@ def run_detection(model):
     # --- Passenger Counting ---
     person_last_zone = {}
     passenger_entry_times = {}
+    person_last_seen = {}  # Track when each person was last seen
+    exit_timeout_seconds = 3  # Force exit after 3 seconds of no detection
     # Cache for skipped frames to avoid flicker
     latest_boxes = []  # list of ((x1, y1), (x2, y2))
     last_passengers_in_trike_count = 0
@@ -534,6 +536,25 @@ def run_detection(model):
                     # Get bounding box center (more reliable than nose keypoint)
                     box = boxes[i]  # xywh format: [center_x, center_y, width, height]
                     center_x, center_y = float(box[0]), float(box[1])
+                    box_width, box_height = float(box[2]), float(box[3])
+                    
+                    # Check if person is near edges (likely exiting)
+                    near_left_edge = center_x < 50
+                    near_right_edge = center_x > frame_width - 50
+                    near_bottom_edge = center_y > frame_height - 50
+                    near_top_edge = center_y < 50
+                    
+                    # If person is near edge, force exit
+                    if near_left_edge or near_right_edge or near_bottom_edge or near_top_edge:
+                        if person_id in passenger_entry_times:
+                            dwell_time_seconds = time.time() - passenger_entry_times.pop(person_id)
+                            log_passenger_exit(person_id, dwell_time_seconds)
+                            # Remove from tracking
+                            if person_id in person_last_zone:
+                                del person_last_zone[person_id]
+                            if person_id in person_last_seen:
+                                del person_last_seen[person_id]
+                        continue  # Skip normal zone detection
                     
                     # Also get nose position for backup (in case we need it for drawing)
                     nose_x, nose_y = person_keypoints[0]
@@ -593,6 +614,9 @@ def run_detection(model):
                     # Update person's last known zone
                     if current_zone is not None:
                         person_last_zone[person_id] = current_zone
+                    
+                    # Update when person was last seen
+                    person_last_seen[person_id] = time.time()
 
                 # Save caches after processing all people this frame
                 latest_boxes = new_boxes
@@ -602,6 +626,26 @@ def run_detection(model):
                 run_detection.last_detection_frame = frame_idx
             else:
                 pass  # No detections this frame
+            
+            # Force exit people who haven't been seen for too long
+            current_time = time.time()
+            people_to_exit = []
+            
+            for person_id in list(passenger_entry_times.keys()):
+                if person_id in person_last_seen:
+                    time_since_last_seen = current_time - person_last_seen[person_id]
+                    if time_since_last_seen > exit_timeout_seconds:
+                        # Force exit this person
+                        dwell_time_seconds = current_time - passenger_entry_times.pop(person_id)
+                        log_passenger_exit(person_id, dwell_time_seconds)
+                        people_to_exit.append(person_id)
+            
+            # Remove from tracking
+            for person_id in people_to_exit:
+                if person_id in person_last_zone:
+                    del person_last_zone[person_id]
+                if person_id in person_last_seen:
+                    del person_last_seen[person_id]
 
         # If we skipped inference this frame, draw last known boxes to avoid flicker
         if not did_infer and latest_boxes:

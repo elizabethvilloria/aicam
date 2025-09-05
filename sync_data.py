@@ -13,7 +13,7 @@ import tempfile
 from datetime import datetime
 
 # Configuration
-SERVER_URL = "https://etrikedashboard.com:5001"  # Direct IP access with HTTPS
+SERVER_URL = "https://etrikedashboard.com"  # Direct IP access with HTTPS
 API_KEY = None  # Optional: for authentication
 SYNC_INTERVAL = 5    # 5 seconds
 LOG_DIR = "logs"
