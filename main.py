@@ -532,6 +532,10 @@ def run_detection(model):
                 for i, person_keypoints in enumerate(all_keypoints):
                     person_id = track_ids[i]
                     
+                    # Skip processing if person is in exit cooldown
+                    if person_id in person_exit_cooldown and time.time() - person_exit_cooldown[person_id] < 3.0:
+                        continue  # Skip this person entirely
+                    
                     # Get bounding box center (more reliable than nose keypoint)
                     box = boxes[i]  # xywh format: [center_x, center_y, width, height]
                     center_x, center_y = float(box[0]), float(box[1])
@@ -543,16 +547,15 @@ def run_detection(model):
                     near_bottom_edge = center_y > frame_height - 100  # Increased to 100 pixels
                     near_top_edge = center_y < 100  # Increased to 100 pixels
                     
-                    # If person is near edge, force exit
+                    # If person is near edge, force exit and mark as exiting
                     if near_left_edge or near_right_edge or near_bottom_edge or near_top_edge:
                         if person_id in passenger_entry_times:
                             dwell_time_seconds = time.time() - passenger_entry_times.pop(person_id)
                             log_passenger_exit(person_id, dwell_time_seconds)
                             # Set exit cooldown to prevent re-entry
                             person_exit_cooldown[person_id] = time.time()
-                            # Remove from tracking
-                            if person_id in person_last_zone:
-                                del person_last_zone[person_id]
+                            # Mark person as exiting to prevent zone detection
+                            person_last_zone[person_id] = "exiting"
                             if person_id in person_last_seen:
                                 del person_last_seen[person_id]
                         continue  # Skip normal zone detection
@@ -604,6 +607,10 @@ def run_detection(model):
                         if current_zone is not None:
                             last_zone = person_last_zone.get(person_id)
                             current_time = time.time()
+
+                            # Skip counting if person is in exit cooldown
+                            if person_id in person_exit_cooldown and current_time - person_exit_cooldown[person_id] < 3.0:
+                                continue  # Skip all counting for this person
 
                             if current_zone == "inside" and last_zone != "inside":
                                 # Check exit cooldown: prevent re-entry for 3 seconds after exit
