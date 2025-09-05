@@ -502,9 +502,6 @@ def run_detection(model):
 
         frame_idx += 1
 
-        # Get current time
-        current_time = datetime.datetime.now().strftime("%m-%d-%y %H:%M")
-
         passengers_in_trike_count = 0
 
         # Pause AI model during drag to keep UI responsive
@@ -734,7 +731,8 @@ def run_detection(model):
         cv2.putText(frame, "Inside E-Trike", (inside_zone[0] + 10, 30), font, label_font_scale, inside_green, label_font_thickness)
 
         # Display clock and counters (smaller font)
-        cv2.putText(frame, current_time, (side_margin + 10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.6, info_text_white, 1, cv2.LINE_AA)
+        current_time_str = datetime.datetime.now().strftime("%m-%d-%y %H:%M")
+        cv2.putText(frame, current_time_str, (side_margin + 10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.6, info_text_white, 1, cv2.LINE_AA)
         display_count = passengers_in_trike_count if did_infer else last_passengers_in_trike_count
         cv2.putText(frame, f"Passengers Inside: {display_count}", (side_margin + 10, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.6, info_text_white, 1, cv2.LINE_AA)
         # FPS display
