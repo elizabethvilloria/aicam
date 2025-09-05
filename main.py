@@ -423,6 +423,7 @@ def run_detection(model):
     person_last_seen = {}  # Track when each person was last seen
     exit_timeout_seconds = 3  # Force exit after 3 seconds of no detection
     exit_debounce = {}  # Prevent rapid exit/entry flickering
+    person_exit_cooldown = {}  # Prevent re-entry after exit
     # Cache for skipped frames to avoid flicker
     latest_boxes = []  # list of ((x1, y1), (x2, y2))
     last_passengers_in_trike_count = 0
@@ -537,16 +538,18 @@ def run_detection(model):
                     box_width, box_height = float(box[2]), float(box[3])
                     
                     # Check if person is near edges (likely exiting)
-                    near_left_edge = center_x < 80  # Increased from 50
-                    near_right_edge = center_x > frame_width - 80  # Increased from 50
-                    near_bottom_edge = center_y > frame_height - 80  # Increased from 50
-                    near_top_edge = center_y < 80  # Increased from 50
+                    near_left_edge = center_x < 100  # Increased to 100 pixels
+                    near_right_edge = center_x > frame_width - 100  # Increased to 100 pixels
+                    near_bottom_edge = center_y > frame_height - 100  # Increased to 100 pixels
+                    near_top_edge = center_y < 100  # Increased to 100 pixels
                     
                     # If person is near edge, force exit
                     if near_left_edge or near_right_edge or near_bottom_edge or near_top_edge:
                         if person_id in passenger_entry_times:
                             dwell_time_seconds = time.time() - passenger_entry_times.pop(person_id)
                             log_passenger_exit(person_id, dwell_time_seconds)
+                            # Set exit cooldown to prevent re-entry
+                            person_exit_cooldown[person_id] = time.time()
                             # Remove from tracking
                             if person_id in person_last_zone:
                                 del person_last_zone[person_id]
@@ -603,10 +606,13 @@ def run_detection(model):
                             current_time = time.time()
 
                             if current_zone == "inside" and last_zone != "inside":
-                                # Debounce: only allow entry if not recently exited
-                                if person_id not in exit_debounce or current_time - exit_debounce[person_id] > 1.0:
+                                # Check exit cooldown: prevent re-entry for 3 seconds after exit
+                                if person_id not in person_exit_cooldown or current_time - person_exit_cooldown[person_id] > 3.0:
                                     log_passenger_entry(person_id, passenger_type)
                                     passenger_entry_times[person_id] = current_time
+                                    # Clear exit cooldown on successful entry
+                                    if person_id in person_exit_cooldown:
+                                        del person_exit_cooldown[person_id]
                             elif current_zone != "inside" and last_zone == "inside":
                                 if person_id in passenger_entry_times:
                                     dwell_time_seconds = current_time - passenger_entry_times.pop(person_id)
