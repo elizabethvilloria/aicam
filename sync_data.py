@@ -11,17 +11,18 @@ import time
 import zipfile
 import tempfile
 from datetime import datetime
+import pytz
 
 # Configuration
 SERVER_URL = "https://etrikedashboard.com"  # Direct IP access with HTTPS
 API_KEY = None  # Optional: for authentication
-SYNC_INTERVAL = 5    # 5 seconds
+SYNC_INTERVAL = 10   # 10 seconds
 LOG_DIR = "logs"
 HISTORICAL_FILE = "historical_summary.json"
 
 def create_data_package():
     """Create a zip file with all log data and historical summary"""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(pytz.timezone('Europe/Madrid')).strftime("%Y%m%d_%H%M%S")
     
     with tempfile.NamedTemporaryFile(suffix=f"_data_{timestamp}.zip", delete=False) as temp_zip:
         with zipfile.ZipFile(temp_zip.name, 'w', zipfile.ZIP_DEFLATED) as zipf:
@@ -64,7 +65,7 @@ def upload_data_package(zip_path):
             print(f"📡 Response status: {response.status_code}")
             
             if response.status_code == 200:
-                print(f"✅ Data uploaded successfully at {datetime.now()}")
+                print(f"✅ Data uploaded successfully at {datetime.now(pytz.timezone('Europe/Madrid'))}")
                 return True
             else:
                 print(f"❌ Upload failed: {response.status_code} - {response.text}")
@@ -80,7 +81,7 @@ def upload_data_package(zip_path):
 
 def sync_data():
     """Main sync function"""
-    print(f"🔄 Starting data sync at {datetime.now()}")
+    print(f"🔄 Starting data sync at {datetime.now(pytz.timezone('Europe/Madrid'))}")
     
     # Create data package
     zip_path = create_data_package()

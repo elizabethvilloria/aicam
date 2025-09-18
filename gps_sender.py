@@ -11,6 +11,7 @@ import requests
 import json
 import sys
 from datetime import datetime
+import pytz
 
 class GPSSender:
     def __init__(self, pi_id, dashboard_url="https://etrikedashboard.com"):
@@ -45,7 +46,7 @@ class GPSSender:
                         'longitude': float(msg.longitude),
                         'speed': float(msg.spd_over_grnd) if msg.spd_over_grnd else 0,
                         'heading': float(msg.true_course) if msg.true_course else 0,
-                        'timestamp': int(time.time())
+                        'timestamp': int(datetime.now(pytz.timezone('Europe/Madrid')).timestamp())
                     }
         except Exception as e:
             print(f"Error reading GPS data: {e}")
