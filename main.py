@@ -507,10 +507,10 @@ def run_detection(model):
         passengers_in_trike_count = 0
 
         # Pause AI model during drag to keep UI responsive
-        # Also skip every other frame to reduce CPU load
+        # Pi 5 can handle every frame for 9 people
         did_infer = False
-        if shared_state['dragging_line'] is None and (frame_idx % 3 == 0):
-            # Run YOLOv8 tracking on the frame with better inference size for multiple people
+        if shared_state['dragging_line'] is None:
+            # Run YOLOv8 tracking on every frame - optimized for Pi 5 and 9 people
             results = model.track(
                 frame,
                 persist=True,
@@ -519,7 +519,7 @@ def run_detection(model):
                 tracker="bytetrack.yaml",
                 imgsz=640,
                 conf=0.6,
-                max_det=10
+                max_det=15
             )
             did_infer = True
 
