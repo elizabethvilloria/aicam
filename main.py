@@ -509,16 +509,16 @@ def run_detection(model):
         # Pause AI model during drag to keep UI responsive
         # Also skip every other frame to reduce CPU load
         did_infer = False
-        if shared_state['dragging_line'] is None and (frame_idx % 2 == 0):
-            # Run YOLOv8 tracking on the frame with smaller inference size
+        if shared_state['dragging_line'] is None and (frame_idx % 3 == 0):
+            # Run YOLOv8 tracking on the frame with better inference size for multiple people
             results = model.track(
                 frame,
                 persist=True,
                 verbose=False,
                 device="cpu",
                 tracker="bytetrack.yaml",
-                imgsz=320,
-                conf=0.7,
+                imgsz=640,
+                conf=0.6,
                 max_det=10
             )
             did_infer = True
