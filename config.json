@@ -51,6 +51,6 @@
     },
     "side_margin": 61,
     "bottom_margin": 68,
-    "flip_horizontal": true,
-    "flip_vertical": true
+    "flip_horizontal": false,
+    "flip_vertical": false
 }

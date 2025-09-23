@@ -9,7 +9,7 @@ from collections import defaultdict
 # Optional: Picamera2 for Raspberry Pi camera support
 try:
     from picamera2 import Picamera2
-    PICAMERA2_AVAILABLE = True
+    PICAMERA2_AVAILABLE = Trueimg
 except Exception:
     PICAMERA2_AVAILABLE = False
 
