@@ -1,6 +1,12 @@
 # ingest_mirror.py
 import os, json, time, glob, uuid, datetime, requests
 
+VERBOSE = os.getenv("MIRROR_VERBOSE", "0") == "1"
+
+def vlog(*args, **kwargs):
+    if VERBOSE:
+        print(*args, **kwargs)
+
 DASH_URL   = os.getenv("INGEST_URL", "https://etrikedashboard.com")
 INGEST_KEY = os.getenv("INGEST_KEY", "")
 DEVICE_ID  = os.getenv("PI_ID", "PI_CANARY_001")
@@ -8,7 +14,6 @@ STATE_PATH = os.getenv("INGEST_STATE", "ingest_state.json")
 LOG_ROOT   = os.getenv("LOG_ROOT", "/home/pi/aicam/logs")  # path to existing logs root
 BATCH_SIZE = int(os.getenv("INGEST_BATCH_SIZE", "50"))
 INTERVAL_S = int(os.getenv("INGEST_INTERVAL", "5"))
-VERBOSE = os.getenv("MIRROR_VERBOSE", "0") == "1"
 
 def load_state():
     try:
@@ -66,9 +71,11 @@ def run_once():
     last_seq = int(state.get("last_seq", 0))
     rows = read_entries()
     if not rows:
+        vlog("[ingest-mirror] no-rows")
         return "no-rows"
     events, new_seq = build_events(rows, last_seq)
     if not events:
+        vlog("[ingest-mirror] no-events")
         return "no-events"
     try:
         resp = requests.post(
@@ -82,11 +89,16 @@ def run_once():
         if ack > last_seq:
             state["last_seq"] = ack
             save_state(state)
-        if VERBOSE:
-            return f"posted={len(events)} ack={ack}"
-        else:
-            return f"batch ok: +{len(events)}, ack={ack}"
+        
+        posted = len(events)
+        vlog(f"[ingest-mirror] posted={posted} ack={ack}")
+        # optionally show a tiny heartbeat only when something was sent
+        if not VERBOSE and posted:
+            print(f"[ingest-mirror] batch ok: +{posted}, ack={ack}")
+        
+        return f"posted={posted} ack={ack}"
     except Exception as e:
+        print(f"[ingest-mirror] error:{e}")
         return f"error:{e}"
 
 if __name__ == "__main__":
