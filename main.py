@@ -53,8 +53,7 @@ def log_passenger_entry(person_id, passenger_type):
         "pi_id": config.get("pi_id", "unknown"),
         "city": config.get("city", "unknown"),
         "toda_id": config.get("toda_id", "unknown"),
-        "etrike_id": config.get("etrike_id", "unknown"),
-        "location": config.get("location", "unknown")
+        "etrike_id": config.get("etrike_id", "unknown")
     }
     
     # Read existing data and append the new entry

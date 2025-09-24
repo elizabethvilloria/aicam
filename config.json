@@ -5,8 +5,7 @@
     "pi_id": "PI001",
     "city": "manila",
     "toda_id": "bltmpc",
-    "etrike_id": "00001",
-    "location": "Main Terminal",
+    "etrike_id": "0000",
     "colors": {
         "exit_red": [
             0,
