@@ -8,6 +8,7 @@ STATE_PATH = os.getenv("INGEST_STATE", "ingest_state.json")
 LOG_ROOT   = os.getenv("LOG_ROOT", "/home/pi/aicam/logs")  # path to existing logs root
 BATCH_SIZE = int(os.getenv("INGEST_BATCH_SIZE", "50"))
 INTERVAL_S = int(os.getenv("INGEST_INTERVAL", "5"))
+VERBOSE = os.getenv("MIRROR_VERBOSE", "0") == "1"
 
 def load_state():
     try:
@@ -81,7 +82,10 @@ def run_once():
         if ack > last_seq:
             state["last_seq"] = ack
             save_state(state)
-        return f"posted={len(events)} ack={ack}"
+        if VERBOSE:
+            return f"posted={len(events)} ack={ack}"
+        else:
+            return f"batch ok: +{len(events)}, ack={ack}"
     except Exception as e:
         return f"error:{e}"
 
