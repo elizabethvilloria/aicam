@@ -46,7 +46,6 @@ def log_passenger_entry(person_id, passenger_type):
     
     new_entry = {
         "person_id": person_id, 
-        "type": passenger_type, 
         "entry_timestamp": now.timestamp(),
         "exit_timestamp": None,
         "dwell_time_minutes": None,
