@@ -5,7 +5,7 @@ DASH_URL   = os.getenv("INGEST_URL", "https://etrikedashboard.com")
 INGEST_KEY = os.getenv("INGEST_KEY", "")
 DEVICE_ID  = os.getenv("PI_ID", "PI_CANARY_001")
 STATE_PATH = os.getenv("INGEST_STATE", "ingest_state.json")
-LOG_ROOT   = os.getenv("LOG_ROOT", "logs")  # path to existing logs root
+LOG_ROOT   = os.getenv("LOG_ROOT", "/home/pi/aicam/logs")  # path to existing logs root
 BATCH_SIZE = int(os.getenv("INGEST_BATCH_SIZE", "50"))
 INTERVAL_S = int(os.getenv("INGEST_INTERVAL", "5"))
 
@@ -20,8 +20,15 @@ def save_state(s):
 
 def today_files():
     t = datetime.date.today()
-    # Matches your actual pattern: logs/YYYY/M/D.json
-    return sorted(glob.glob(f"{LOG_ROOT}/{t.year}/{t.month}/{t.day}.json"))
+    # matches logs/YYYY/M/D.json
+    pattern = f"{LOG_ROOT}/{t.year}/{t.month}/{t.day}.json"
+    files = glob.glob(pattern)
+    # fallback: check yesterday (in case timezone offset causes mismatch)
+    if not files:
+        y = t - datetime.timedelta(days=1)
+        pattern = f"{LOG_ROOT}/{y.year}/{y.month}/{y.day}.json"
+        files = glob.glob(pattern)
+    return files
 
 def read_entries():
     rows = []
