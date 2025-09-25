@@ -53,6 +53,10 @@ def build_events(rows, start_seq):
     for r in rows:
         seq += 1
         evt_time = r.get("exit_timestamp") or r.get("entry_timestamp") or time.time()
+        
+        # DEBUG: Print what we're sending
+        print(f"[DEBUG] Sending event {seq}: person_id={r.get('person_id')}, entry_timestamp={r.get('entry_timestamp')}")
+        
         events.append({
             "event_id": f"{DEVICE_ID}-{seq}-{uuid.uuid4().hex[:6]}",
             "device_id": DEVICE_ID,
