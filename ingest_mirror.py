@@ -19,7 +19,7 @@ def load_state():
     try:
         with open(STATE_PATH, "r") as f: return json.load(f)
     except Exception:
-        return {"last_seq": 0}
+        return {"last_seq": 0, "last_sent_timestamp": 0}
 
 def save_state(s):
     with open(STATE_PATH, "w") as f: json.dump(s, f)
@@ -47,22 +47,23 @@ def read_entries():
             continue
     return rows
 
-def build_events(rows, start_seq):
+def build_events(rows, start_seq, last_sent_timestamp):
     seq = start_seq
     events = []
     
-    # Only process rows that haven't been sent yet
-    for i, r in enumerate(rows):
-        seq += 1
+    # Only process rows that haven't been sent yet (by timestamp)
+    for r in rows:
+        entry_timestamp = r.get("entry_timestamp", 0)
         
-        # Skip if this event has already been sent
-        if seq <= start_seq:
+        # Skip if this event has already been sent (by timestamp)
+        if entry_timestamp <= last_sent_timestamp:
             continue
             
-        evt_time = r.get("exit_timestamp") or r.get("entry_timestamp") or time.time()
+        seq += 1
+        evt_time = r.get("exit_timestamp") or entry_timestamp or time.time()
         
         # DEBUG: Print what we're sending
-        print(f"[DEBUG] Sending event {seq}: person_id={r.get('person_id')}, entry_timestamp={r.get('entry_timestamp')}")
+        print(f"[DEBUG] Sending event {seq}: person_id={r.get('person_id')}, entry_timestamp={entry_timestamp}")
         
         events.append({
             "event_id": f"{DEVICE_ID}-{seq}-{uuid.uuid4().hex[:6]}",
@@ -82,11 +83,12 @@ def build_events(rows, start_seq):
 def run_once():
     state = load_state()
     last_seq = int(state.get("last_seq", 0))
+    last_sent_timestamp = float(state.get("last_sent_timestamp", 0))
     rows = read_entries()
     if not rows:
         vlog("[ingest-mirror] no-rows")
         return "no-rows"
-    events, new_seq = build_events(rows, last_seq)
+    events, new_seq = build_events(rows, last_seq, last_sent_timestamp)
     if not events:
         vlog("[ingest-mirror] no-events")
         return "no-events"
@@ -101,6 +103,10 @@ def run_once():
         ack = int(resp.json().get("ack_seq", last_seq))
         if ack > last_seq:
             state["last_seq"] = ack
+            # Update last_sent_timestamp to the latest event timestamp
+            if events:
+                latest_timestamp = max(event["payload_json"].get("entry_timestamp", 0) for event in events)
+                state["last_sent_timestamp"] = latest_timestamp
             save_state(state)
         
         posted = len(events)
