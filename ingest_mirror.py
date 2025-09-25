@@ -50,8 +50,15 @@ def read_entries():
 def build_events(rows, start_seq):
     seq = start_seq
     events = []
-    for r in rows:
+    
+    # Only process rows that haven't been sent yet
+    for i, r in enumerate(rows):
         seq += 1
+        
+        # Skip if this event has already been sent
+        if seq <= start_seq:
+            continue
+            
         evt_time = r.get("exit_timestamp") or r.get("entry_timestamp") or time.time()
         
         # DEBUG: Print what we're sending
@@ -66,8 +73,10 @@ def build_events(rows, start_seq):
             "event_time_utc": float(evt_time),
             "payload_json": r  # <- uses existing log shape
         })
+        
         if len(events) >= BATCH_SIZE:
             break
+    
     return events, seq
 
 def run_once():
