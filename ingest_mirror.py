@@ -55,10 +55,12 @@ def build_events(rows, start_seq, last_sent_timestamp):
     for r in rows:
         entry_timestamp = r.get("entry_timestamp", 0)
         
-        # Skip if this event has already been sent (by timestamp)
-        if entry_timestamp <= last_sent_timestamp:
+        # Skip if this is an entry event that was already sent
+        # But allow exit events to be sent even if entry was already sent
+        if entry_timestamp <= last_sent_timestamp and not r.get("exit_timestamp"):
+            print(f"[SKIP] Person {r.get('person_id')} entry already sent (timestamp {entry_timestamp} <= {last_sent_timestamp})")
             continue
-            
+        
         seq += 1
         evt_time = r.get("exit_timestamp") or entry_timestamp or time.time()
         
