@@ -62,15 +62,21 @@ def build_events(rows, start_seq, last_sent_timestamp):
         seq += 1
         evt_time = r.get("exit_timestamp") or entry_timestamp or time.time()
         
+        # Create session ID based on person_id + entry_timestamp for consistency
+        session_id = f"{r.get('person_id')}_{int(entry_timestamp)}"
+        
+        # Determine event type based on whether exit data exists
+        event_type = "PASSENGER_EXIT" if r.get("exit_timestamp") else "PASSENGER_ENTRY"
+        
         # DEBUG: Print what we're sending
-        print(f"[DEBUG] Sending event {seq}: person_id={r.get('person_id')}, entry_timestamp={entry_timestamp}")
+        print(f"[DEBUG] Sending {event_type} {seq}: person_id={r.get('person_id')}, entry_timestamp={entry_timestamp}, exit_timestamp={r.get('exit_timestamp')}")
         
         events.append({
             "event_id": f"{DEVICE_ID}-{seq}-{uuid.uuid4().hex[:6]}",
             "device_id": DEVICE_ID,
             "seq": seq,
-            "session_id": r.get("person_id", "session"),
-            "type": "PASSENGER",
+            "session_id": session_id,  # Consistent session ID
+            "type": event_type,        # ENTRY or EXIT
             "event_time_utc": float(evt_time),
             "payload_json": r  # <- uses existing log shape
         })
