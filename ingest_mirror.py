@@ -17,9 +17,13 @@ INTERVAL_S = int(os.getenv("INGEST_INTERVAL", "5"))
 
 def load_state():
     try:
-        with open(STATE_PATH, "r") as f: return json.load(f)
+        state = json.load(open(STATE_PATH, "r"))
+        # Ensure sent_events key exists for backward compatibility
+        if "sent_events" not in state:
+            state["sent_events"] = {}
+        return state
     except Exception:
-        return {"last_seq": 0, "last_sent_timestamp": 0, "sent_events": {}} # Track sent events
+        return {"last_seq": 0, "last_sent_timestamp": 0, "sent_events": {}}
 
 def save_state(s):
     with open(STATE_PATH, "w") as f: json.dump(s, f)
@@ -122,6 +126,7 @@ def run_once():
             headers={"Content-Type": "application/json", "X-Ingest-Key": INGEST_KEY},
             timeout=10
         )
+        print(f"[DEBUG] Dashboard response: {resp.status_code} - {resp.text}")
         resp.raise_for_status()
         ack = int(resp.json().get("ack_seq", last_seq))
         if ack > last_seq:
@@ -157,7 +162,9 @@ def run_once():
         
         return f"posted={posted} ack={ack}"
     except Exception as e:
-        print(f"[ingest-mirror] error:{e}")
+        print(f"[ingest-mirror] error: {e}")
+        import traceback
+        traceback.print_exc()
         return f"error:{e}"
 
 if __name__ == "__main__":
