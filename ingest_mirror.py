@@ -125,20 +125,20 @@ def run_once():
                 state["last_sent_timestamp"] = latest_timestamp
             save_state(state)
         
-               posted = len(events)
-               vlog(f"[ingest-mirror] posted={posted} ack={ack}")
-               
-               # Show summary of what was sent
-               if posted > 0:
-                   entry_count = sum(1 for e in events if e["type"] == "PASSENGER_ENTRY")
-                   exit_count = sum(1 for e in events if e["type"] == "PASSENGER_EXIT")
-                   print(f"📤 [BATCH SENT] {posted} events: {entry_count} entries, {exit_count} exits")
-                   print(f"   Dashboard acknowledged up to sequence: {ack}")
-                   print("─" * 50)
-               
-               # optionally show a tiny heartbeat only when something was sent
-               if not VERBOSE and posted:
-                   print(f"[ingest-mirror] batch ok: +{posted}, ack={ack}")
+        posted = len(events)
+        vlog(f"[ingest-mirror] posted={posted} ack={ack}")
+        
+        # Show summary of what was sent
+        if posted > 0:
+            entry_count = sum(1 for e in events if e["type"] == "PASSENGER_ENTRY")
+            exit_count = sum(1 for e in events if e["type"] == "PASSENGER_EXIT")
+            print(f"📤 [BATCH SENT] {posted} events: {entry_count} entries, {exit_count} exits")
+            print(f"   Dashboard acknowledged up to sequence: {ack}")
+            print("─" * 50)
+        
+        # optionally show a tiny heartbeat only when something was sent
+        if not VERBOSE and posted:
+            print(f"[ingest-mirror] batch ok: +{posted}, ack={ack}")
         
         return f"posted={posted} ack={ack}"
     except Exception as e:
