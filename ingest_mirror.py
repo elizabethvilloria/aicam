@@ -19,7 +19,7 @@ def load_state():
     try:
         with open(STATE_PATH, "r") as f: return json.load(f)
     except Exception:
-        return {"last_seq": 0, "last_sent_timestamp": 0}
+        return {"last_seq": 0, "last_sent_timestamp": 0, "sent_events": {}} # Track sent events
 
 def save_state(s):
     with open(STATE_PATH, "w") as f: json.dump(s, f)
@@ -47,17 +47,22 @@ def read_entries():
             continue
     return rows
 
-def build_events(rows, start_seq, last_sent_timestamp):
+def build_events(rows, start_seq, last_sent_timestamp, sent_events):
     seq = start_seq
     events = []
     
-    # Only process rows that haven't been sent yet (by timestamp)
+    # Only process rows that haven't been sent yet
     for r in rows:
+        person_id = r.get("person_id")
         entry_timestamp = r.get("entry_timestamp", 0)
+        exit_timestamp = r.get("exit_timestamp")
         
-        # Skip if this person was already sent (either entry or exit)
-        if entry_timestamp <= last_sent_timestamp:
-            print(f"[SKIP] Person {r.get('person_id')} already sent (timestamp {entry_timestamp} <= {last_sent_timestamp})")
+        # Create event key for tracking
+        event_key = f"{person_id}_{int(entry_timestamp)}"
+        
+        # Skip if this exact event was already sent
+        if event_key in sent_events:
+            print(f"[SKIP] Person {person_id} event already sent (key: {event_key})")
             continue
         
         seq += 1
@@ -101,11 +106,12 @@ def run_once():
     state = load_state()
     last_seq = int(state.get("last_seq", 0))
     last_sent_timestamp = float(state.get("last_sent_timestamp", 0))
+    sent_events = state.get("sent_events", {})
     rows = read_entries()
     if not rows:
         vlog("[ingest-mirror] no-rows")
         return "no-rows"
-    events, new_seq = build_events(rows, last_seq, last_sent_timestamp)
+    events, new_seq = build_events(rows, last_seq, last_sent_timestamp, sent_events)
     if not events:
         vlog("[ingest-mirror] no-events")
         return "no-events"
@@ -124,6 +130,14 @@ def run_once():
             if events:
                 latest_timestamp = max(event["payload_json"].get("entry_timestamp", 0) for event in events)
                 state["last_sent_timestamp"] = latest_timestamp
+                
+                # Track sent events
+                for event in events:
+                    person_id = event["payload_json"].get("person_id")
+                    entry_timestamp = event["payload_json"].get("entry_timestamp", 0)
+                    event_key = f"{person_id}_{int(entry_timestamp)}"
+                    state["sent_events"][event_key] = True
+                    
             save_state(state)
         
         posted = len(events)
