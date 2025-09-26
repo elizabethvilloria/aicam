@@ -595,34 +595,52 @@ def run_detection(model):
                             hb_sp, hb_ep = head_box
                             cv2.rectangle(frame, hb_sp, hb_ep, (255, 0, 255), 2)
                             
-                            # Add real-time dwell time display above head
+                            # Add passenger ID and dwell time display above head
+                            text_x = hb_sp[0]
+                            text_y = hb_sp[1] - 10
+                            
+                            # Always show passenger ID
+                            id_text = f"ID: {person_id}"
+                            id_text_size = cv2.getTextSize(id_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
+                            
+                            # Draw background rectangle for ID text
+                            cv2.rectangle(frame, 
+                                        (text_x - 5, text_y - id_text_size[1] - 5), 
+                                        (text_x + id_text_size[0] + 5, text_y + 5), 
+                                        (0, 0, 0), -1)  # Black background
+                            
+                            # Draw passenger ID text
+                            cv2.putText(frame, id_text, 
+                                      (text_x, text_y), 
+                                      cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)  # Yellow text
+                            
+                            # Add dwell time display if passenger is inside
                             if person_id in passenger_entry_times:
                                 current_time = time.time()
                                 dwell_time_seconds = current_time - passenger_entry_times[person_id]
                                 
                                 # Format display: seconds for < 1 minute, minutes:seconds for >= 1 minute
                                 if dwell_time_seconds < 60:
-                                    display_text = f"{int(dwell_time_seconds)}s"
+                                    dwell_text = f"{int(dwell_time_seconds)}s"
                                 else:
                                     minutes = int(dwell_time_seconds // 60)
                                     seconds = int(dwell_time_seconds % 60)
-                                    display_text = f"{minutes}m{seconds}s"
+                                    dwell_text = f"{minutes}m{seconds}s"
                                 
-                                # Position text above the head box
-                                text_x = hb_sp[0]
-                                text_y = hb_sp[1] - 10
+                                # Position dwell time text below ID
+                                dwell_y = text_y + 25
                                 
-                                # Draw background rectangle for text
-                                text_size = cv2.getTextSize(display_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+                                # Draw background rectangle for dwell time text
+                                dwell_text_size = cv2.getTextSize(dwell_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
                                 cv2.rectangle(frame, 
-                                            (text_x - 5, text_y - text_size[1] - 5), 
-                                            (text_x + text_size[0] + 5, text_y + 5), 
+                                            (text_x - 5, dwell_y - dwell_text_size[1] - 5), 
+                                            (text_x + dwell_text_size[0] + 5, dwell_y + 5), 
                                             (0, 0, 0), -1)  # Black background
                                 
                                 # Draw dwell time text
-                                cv2.putText(frame, display_text, 
-                                          (text_x, text_y), 
-                                          cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                                cv2.putText(frame, dwell_text, 
+                                          (text_x, dwell_y), 
+                                          cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)  # Green text
                             
                             # Cache head box for skipped frames
                             new_boxes.append((hb_sp, hb_ep))
