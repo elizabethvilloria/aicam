@@ -85,7 +85,8 @@ def log_passenger_exit(person_id, dwell_time_seconds):
             for entry in reversed(logs):
                 if entry.get("person_id") == person_id and entry.get("exit_timestamp") is None:
                     entry["exit_timestamp"] = now.timestamp()
-                    entry["dwell_time_minutes"] = round(dwell_time_seconds / 60, 1)
+                    entry["dwell_time_seconds"] = int(dwell_time_seconds)
+                    entry["dwell_time_minutes"] = round(dwell_time_seconds / 60, 2)
                     break
             
             with open(log_file, 'w') as f:
