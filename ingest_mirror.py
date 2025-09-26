@@ -64,10 +64,15 @@ def build_events(rows, start_seq, last_sent_timestamp, sent_events):
         # Create event key for tracking
         event_key = f"{person_id}_{int(entry_timestamp)}"
         
-        # Skip if this exact event was already sent
+        # Skip if this exact event was already sent AND data hasn't changed
         if event_key in sent_events:
-            print(f"[SKIP] Person {person_id} event already sent (key: {event_key})")
-            continue
+            # Check if this is an update (has exit data when previously didn't)
+            if exit_timestamp and not sent_events[event_key].get("had_exit", False):
+                print(f"[UPDATE] Person {person_id} - sending exit update (key: {event_key})")
+                # Allow this update to be sent
+            else:
+                print(f"[SKIP] Person {person_id} event already sent (key: {event_key})")
+                continue
         
         seq += 1
         evt_time = r.get("exit_timestamp") or entry_timestamp or time.time()
@@ -140,8 +145,12 @@ def run_once():
                 for event in events:
                     person_id = event["payload_json"].get("person_id")
                     entry_timestamp = event["payload_json"].get("entry_timestamp", 0)
+                    exit_timestamp = event["payload_json"].get("exit_timestamp")
                     event_key = f"{person_id}_{int(entry_timestamp)}"
-                    state["sent_events"][event_key] = True
+                    state["sent_events"][event_key] = {
+                        "sent": True,
+                        "had_exit": bool(exit_timestamp)
+                    }
                     
             save_state(state)
         
