@@ -598,21 +598,28 @@ def run_detection(model):
                             if person_id in passenger_entry_times:
                                 current_time = time.time()
                                 dwell_time_seconds = current_time - passenger_entry_times[person_id]
-                                dwell_time_minutes = round(dwell_time_seconds / 60, 1)
+                                
+                                # Format display: seconds for < 1 minute, minutes:seconds for >= 1 minute
+                                if dwell_time_seconds < 60:
+                                    display_text = f"{int(dwell_time_seconds)}s"
+                                else:
+                                    minutes = int(dwell_time_seconds // 60)
+                                    seconds = int(dwell_time_seconds % 60)
+                                    display_text = f"{minutes}m{seconds}s"
                                 
                                 # Position text above the head box
                                 text_x = hb_sp[0]
                                 text_y = hb_sp[1] - 10
                                 
                                 # Draw background rectangle for text
-                                text_size = cv2.getTextSize(f"{dwell_time_minutes}m", cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+                                text_size = cv2.getTextSize(display_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
                                 cv2.rectangle(frame, 
                                             (text_x - 5, text_y - text_size[1] - 5), 
                                             (text_x + text_size[0] + 5, text_y + 5), 
                                             (0, 0, 0), -1)  # Black background
                                 
                                 # Draw dwell time text
-                                cv2.putText(frame, f"{dwell_time_minutes}m", 
+                                cv2.putText(frame, display_text, 
                                           (text_x, text_y), 
                                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
                             
