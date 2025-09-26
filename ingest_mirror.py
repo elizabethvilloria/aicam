@@ -68,6 +68,16 @@ def build_events(rows, start_seq, last_sent_timestamp):
         # Determine event type based on whether exit data exists
         event_type = "PASSENGER_EXIT" if r.get("exit_timestamp") else "PASSENGER_ENTRY"
         
+        # Enhanced logging for exit events
+        if event_type == "PASSENGER_EXIT":
+            exit_timestamp = r.get('exit_timestamp')
+            dwell_time_minutes = r.get('dwell_time_minutes', 0)
+            print(f"🚪 [EXIT EVENT] Person {r.get('person_id')} exited after {dwell_time_minutes:.2f} minutes")
+            print(f"   Entry: {datetime.datetime.fromtimestamp(entry_timestamp).strftime('%H:%M:%S')}")
+            print(f"   Exit:  {datetime.datetime.fromtimestamp(exit_timestamp).strftime('%H:%M:%S')}")
+        else:
+            print(f"🚶 [ENTRY EVENT] Person {r.get('person_id')} entered at {datetime.datetime.fromtimestamp(entry_timestamp).strftime('%H:%M:%S')}")
+        
         # DEBUG: Print what we're sending
         print(f"[DEBUG] Sending {event_type} {seq}: person_id={r.get('person_id')}, entry_timestamp={entry_timestamp}, exit_timestamp={r.get('exit_timestamp')}")
         
@@ -115,11 +125,20 @@ def run_once():
                 state["last_sent_timestamp"] = latest_timestamp
             save_state(state)
         
-        posted = len(events)
-        vlog(f"[ingest-mirror] posted={posted} ack={ack}")
-        # optionally show a tiny heartbeat only when something was sent
-        if not VERBOSE and posted:
-            print(f"[ingest-mirror] batch ok: +{posted}, ack={ack}")
+               posted = len(events)
+               vlog(f"[ingest-mirror] posted={posted} ack={ack}")
+               
+               # Show summary of what was sent
+               if posted > 0:
+                   entry_count = sum(1 for e in events if e["type"] == "PASSENGER_ENTRY")
+                   exit_count = sum(1 for e in events if e["type"] == "PASSENGER_EXIT")
+                   print(f"📤 [BATCH SENT] {posted} events: {entry_count} entries, {exit_count} exits")
+                   print(f"   Dashboard acknowledged up to sequence: {ack}")
+                   print("─" * 50)
+               
+               # optionally show a tiny heartbeat only when something was sent
+               if not VERBOSE and posted:
+                   print(f"[ingest-mirror] batch ok: +{posted}, ack={ack}")
         
         return f"posted={posted} ack={ack}"
     except Exception as e:
