@@ -55,10 +55,9 @@ def build_events(rows, start_seq, last_sent_timestamp):
     for r in rows:
         entry_timestamp = r.get("entry_timestamp", 0)
         
-        # Skip if this is an entry event that was already sent
-        # But allow exit events to be sent even if entry was already sent
-        if entry_timestamp <= last_sent_timestamp and not r.get("exit_timestamp"):
-            print(f"[SKIP] Person {r.get('person_id')} entry already sent (timestamp {entry_timestamp} <= {last_sent_timestamp})")
+        # Skip if this person was already sent (either entry or exit)
+        if entry_timestamp <= last_sent_timestamp:
+            print(f"[SKIP] Person {r.get('person_id')} already sent (timestamp {entry_timestamp} <= {last_sent_timestamp})")
             continue
         
         seq += 1
@@ -67,18 +66,18 @@ def build_events(rows, start_seq, last_sent_timestamp):
         # Create session ID based on person_id + entry_timestamp for consistency
         session_id = f"{r.get('person_id')}_{int(entry_timestamp)}"
         
-        # Determine event type based on whether exit data exists
-        event_type = "PASSENGER_EXIT" if r.get("exit_timestamp") else "PASSENGER_ENTRY"
+        # Always send as PASSENGER event (complete trip data)
+        event_type = "PASSENGER"
         
-        # Enhanced logging for exit events
-        if event_type == "PASSENGER_EXIT":
+        # Enhanced logging for passenger events
+        if r.get('exit_timestamp'):
             exit_timestamp = r.get('exit_timestamp')
             dwell_time_minutes = r.get('dwell_time_minutes', 0)
-            print(f"🚪 [EXIT EVENT] Person {r.get('person_id')} exited after {dwell_time_minutes:.2f} minutes")
+            print(f"👤 [PASSENGER] Person {r.get('person_id')} - Complete trip: {dwell_time_minutes:.2f} minutes")
             print(f"   Entry: {datetime.datetime.fromtimestamp(entry_timestamp).strftime('%H:%M:%S')}")
             print(f"   Exit:  {datetime.datetime.fromtimestamp(exit_timestamp).strftime('%H:%M:%S')}")
         else:
-            print(f"🚶 [ENTRY EVENT] Person {r.get('person_id')} entered at {datetime.datetime.fromtimestamp(entry_timestamp).strftime('%H:%M:%S')}")
+            print(f"👤 [PASSENGER] Person {r.get('person_id')} - Entry only at {datetime.datetime.fromtimestamp(entry_timestamp).strftime('%H:%M:%S')}")
         
         # DEBUG: Print what we're sending
         print(f"[DEBUG] Sending {event_type} {seq}: person_id={r.get('person_id')}, entry_timestamp={entry_timestamp}, exit_timestamp={r.get('exit_timestamp')}")
