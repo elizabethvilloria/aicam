@@ -66,8 +66,17 @@ def build_events(rows, start_seq, last_sent_timestamp, sent_events):
         
         # Skip if this exact event was already sent AND data hasn't changed
         if event_key in sent_events:
+            # Handle backward compatibility - old events stored as True
+            event_data = sent_events[event_key]
+            if isinstance(event_data, bool):
+                # Old format - assume no exit data was sent
+                had_exit = False
+            else:
+                # New format - check had_exit flag
+                had_exit = event_data.get("had_exit", False)
+            
             # Check if this is an update (has exit data when previously didn't)
-            if exit_timestamp and not sent_events[event_key].get("had_exit", False):
+            if exit_timestamp and not had_exit:
                 print(f"[UPDATE] Person {person_id} - sending exit update (key: {event_key})")
                 # Allow this update to be sent
             else:
