@@ -11,7 +11,31 @@ DASH_URL   = os.getenv("INGEST_URL", "https://etrikedashboard.com")
 INGEST_KEY = os.getenv("INGEST_KEY", "")
 DEVICE_ID  = os.getenv("PI_ID", "PI_CANARY_001")
 STATE_PATH = os.getenv("INGEST_STATE", "ingest_state.json")
-LOG_ROOT   = os.getenv("LOG_ROOT", "/home/pi/aicam/logs")  # path to existing logs root
+# Auto-detect logs directory - try common locations
+def find_logs_dir():
+    # First try environment variable
+    env_log_root = os.getenv("LOG_ROOT")
+    if env_log_root and os.path.exists(env_log_root):
+        return env_log_root
+    
+    # Try common locations relative to current directory
+    possible_paths = [
+        "logs",  # logs in current directory
+        "../logs",  # logs in parent directory
+        "/home/pi/aicam/logs",  # original default
+        f"/home/{os.getenv('USER', 'pi')}/Desktop/aicam/logs",  # user's Desktop
+        f"/home/{os.getenv('USER', 'pi')}/aicam/logs",  # user's home
+    ]
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+    
+    # Fallback to environment variable or default
+    return env_log_root or "/home/pi/aicam/logs"
+
+LOG_ROOT = find_logs_dir()
+print(f"[ingest-mirror] Using logs directory: {LOG_ROOT}")
 BATCH_SIZE = int(os.getenv("INGEST_BATCH_SIZE", "50"))
 INTERVAL_S = int(os.getenv("INGEST_INTERVAL", "5"))
 
@@ -29,15 +53,32 @@ def save_state(s):
     with open(STATE_PATH, "w") as f: json.dump(s, f)
 
 def today_files():
+    # Look for the most recent log file instead of just today's
+    # First try today
     t = datetime.date.today()
-    # matches logs/YYYY/M/D.json
     pattern = f"{LOG_ROOT}/{t.year}/{t.month}/{t.day}.json"
     files = glob.glob(pattern)
-    # fallback: check yesterday (in case timezone offset causes mismatch)
+    
+    # If no file for today, look for the most recent file in the last 7 days
     if not files:
-        y = t - datetime.timedelta(days=1)
-        pattern = f"{LOG_ROOT}/{y.year}/{y.month}/{y.day}.json"
-        files = glob.glob(pattern)
+        for days_back in range(1, 8):
+            check_date = t - datetime.timedelta(days=days_back)
+            pattern = f"{LOG_ROOT}/{check_date.year}/{check_date.month}/{check_date.day}.json"
+            files = glob.glob(pattern)
+            if files:
+                vlog(f"[ingest-mirror] Found log file from {days_back} days ago: {files[0]}")
+                break
+    
+    # If still no files, look for any .json file in the log directory
+    if not files:
+        pattern = f"{LOG_ROOT}/**/*.json"
+        all_files = glob.glob(pattern, recursive=True)
+        if all_files:
+            # Sort by modification time and take the most recent
+            all_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+            files = [all_files[0]]
+            vlog(f"[ingest-mirror] Using most recent log file: {files[0]}")
+    
     return files
 
 def read_entries():
