@@ -95,77 +95,6 @@ def log_passenger_exit(person_id, dwell_time_seconds):
         except (json.JSONDecodeError, FileNotFoundError):
             pass  # If file is corrupted, skip exit logging
 
-def classify_passenger(person_keypoints, box_height):
-    """Classifies a passenger as 'Adult' or 'Child' based on bounding box height."""
-    height_threshold = 125  # Pixels
-    if box_height < height_threshold:
-        return "Child"
-    else:
-        return "Adult"
-
-
-def compute_head_box(keypoints):
-    """Compute a square box around the head using COCO keypoints (nose/eyes/ears).
-    Returns ((x1, y1), (x2, y2)) or None if not enough info.
-    """
-    head_indices = [0, 1, 2, 3, 4]  # nose, left eye, right eye, left ear, right ear
-    visible = [keypoints[i] for i in head_indices if keypoints[i][0] > 0 and keypoints[i][1] > 0]
-    if not visible:
-        # fallback to nose if present
-        nose = keypoints[0]
-        if nose[0] > 0 and nose[1] > 0:
-            cx, cy = int(nose[0]), int(nose[1])
-            side = 60
-            return (cx - side // 2, cy - side // 2), (cx + side // 2, cy + side // 2)
-        return None
-
-    min_x = int(min(kp[0] for kp in visible))
-    min_y = int(min(kp[1] for kp in visible))
-    max_x = int(max(kp[0] for kp in visible))
-    max_y = int(max(kp[1] for kp in visible))
-
-    cx = (min_x + max_x) // 2
-    cy = (min_y + max_y) // 2
-    width = max_x - min_x
-    height = max_y - min_y
-    side = int(max(width, height) * 1.4)
-    if side < 30:
-        side = 30
-    x1 = cx - side // 2
-    y1 = cy - side // 2
-    x2 = x1 + side
-    y2 = y1 + side
-    return (x1, y1), (x2, y2)
-
-def compute_person_center_for_zone(keypoints):
-    """Choose a robust reference point to determine zones.
-    Priority: nose → average of shoulders/hips → bbox center of visible keypoints.
-    Returns (x, y) or None.
-    """
-    # 1) Nose
-    nose = keypoints[0]
-    if nose[0] > 0 and nose[1] > 0:
-        return int(nose[0]), int(nose[1])
-
-    # 2) Torso center (shoulders and hips)
-    torso_indices = [5, 6, 11, 12]
-    torso_pts = [(int(keypoints[i][0]), int(keypoints[i][1])) for i in torso_indices
-                 if keypoints[i][0] > 0 and keypoints[i][1] > 0]
-    if torso_pts:
-        avg_x = sum(p[0] for p in torso_pts) // len(torso_pts)
-        avg_y = sum(p[1] for p in torso_pts) // len(torso_pts)
-        return avg_x, avg_y
-
-    # 3) Visible keypoints bbox center
-    visible = [kp for kp in keypoints if kp[0] > 0 and kp[1] > 0]
-    if visible:
-        min_x = int(min(kp[0] for kp in visible))
-        min_y = int(min(kp[1] for kp in visible))
-        max_x = int(max(kp[0] for kp in visible))
-        max_y = int(max(kp[1] for kp in visible))
-        return (min_x + max_x) // 2, (min_y + max_y) // 2
-
-    return None
 
 def load_config():
     """Load configuration from a JSON file."""
@@ -525,18 +454,16 @@ def run_detection(model):
             if results and results[0].boxes is not None and results[0].boxes.id is not None:
                 boxes = results[0].boxes.xywh.cpu()
                 track_ids = results[0].boxes.id.int().cpu().tolist()
-                all_keypoints = results[0].keypoints.xy.cpu().numpy()
                 confidences = results[0].boxes.conf.cpu().numpy()
                 new_boxes = []
-                for i, person_keypoints in enumerate(all_keypoints):
+                for i, box in enumerate(boxes):
                     person_id = track_ids[i]
                     
                     # Skip processing if person is in exit cooldown
                     if person_id in person_exit_cooldown and time.time() - person_exit_cooldown[person_id] < 3.0:
                         continue  # Skip this person entirely
                     
-                    # Get bounding box center (more reliable than nose keypoint)
-                    box = boxes[i]  # xywh format: [center_x, center_y, width, height]
+                    # Get bounding box center
                     center_x, center_y = float(box[0]), float(box[1])
                     box_width, box_height = float(box[2]), float(box[3])
                     
@@ -559,10 +486,7 @@ def run_detection(model):
                                 del person_last_seen[person_id]
                         continue  # Skip normal zone detection
                     
-                    # Also get nose position for backup (in case we need it for drawing)
-                    nose_x, nose_y = person_keypoints[0]
-
-                    # Determine person's current zone by body center position (more reliable)
+                    # Determine person's current zone by bounding box center
                     current_zone = None
                     if center_x > 0 and center_y > 0:
                         if left_exit_zone[0] <= center_x < left_exit_zone[2]:
@@ -575,104 +499,88 @@ def run_detection(model):
                             current_zone = "inside"
                             passengers_in_trike_count += 1
 
-                    # --- Bounding box, classification, drawing, and logging ---
-                    visible_keypoints = [kp for kp in person_keypoints if kp[0] > 0 and kp[1] > 0]
+                    # --- Simple bounding box drawing ---
+                    # Draw bounding box around person
+                    start_point = (int(center_x - box_width/2), int(center_y - box_height/2))
+                    end_point = (int(center_x + box_width/2), int(center_y + box_height/2))
+                    cv2.rectangle(frame, start_point, end_point, (255, 0, 255), 2)
                     
-                    if visible_keypoints:
-                        min_x = int(min(kp[0] for kp in visible_keypoints))
-                        min_y = int(min(kp[1] for kp in visible_keypoints))
-                        max_x = int(max(kp[0] for kp in visible_keypoints))
-                        max_y = int(max(kp[1] for kp in visible_keypoints))
+                    # Add passenger ID and dwell time display
+                    text_x = start_point[0]
+                    text_y = start_point[1] - 10
+                    
+                    # Always show passenger ID
+                    id_text = f"ID: {person_id}"
+                    id_text_size = cv2.getTextSize(id_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
+                    
+                    # Draw background rectangle for ID text
+                    cv2.rectangle(frame, 
+                                (text_x - 5, text_y - id_text_size[1] - 5), 
+                                (text_x + id_text_size[0] + 5, text_y + 5), 
+                                (0, 0, 0), -1)  # Black background
+                    
+                    # Draw passenger ID text
+                    cv2.putText(frame, id_text, 
+                              (text_x, text_y), 
+                              cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)  # Yellow text
+                    
+                    # Add dwell time display if passenger is inside
+                    if person_id in passenger_entry_times:
+                        current_time = time.time()
+                        dwell_time_seconds = current_time - passenger_entry_times[person_id]
                         
-                        # Add some padding
-                        padding = 10
-                        start_point = (min_x - padding, min_y - padding)
-                        end_point = (max_x + padding, max_y + padding)
+                        # Format display: seconds for < 1 minute, minutes:seconds for >= 1 minute
+                        if dwell_time_seconds < 60:
+                            dwell_text = f"{int(dwell_time_seconds)}s"
+                        else:
+                            minutes = int(dwell_time_seconds // 60)
+                            seconds = int(dwell_time_seconds % 60)
+                            dwell_text = f"{minutes}m{seconds}s"
+                        
+                        # Position dwell time text below ID
+                        dwell_y = text_y + 25
+                        
+                        # Draw background rectangle for dwell time text
+                        dwell_text_size = cv2.getTextSize(dwell_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
+                        cv2.rectangle(frame, 
+                                    (text_x - 5, dwell_y - dwell_text_size[1] - 5), 
+                                    (text_x + dwell_text_size[0] + 5, dwell_y + 5), 
+                                    (0, 0, 0), -1)  # Black background
+                        
+                        # Draw dwell time text
+                        cv2.putText(frame, dwell_text, 
+                                  (text_x, dwell_y), 
+                                  cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)  # Green text
+                    
+                    # Cache bounding box for skipped frames
+                    new_boxes.append((start_point, end_point))
 
-                        # Draw a square head box instead of full-body box
-                        head_box = compute_head_box(person_keypoints)
-                        if head_box is not None:
-                            hb_sp, hb_ep = head_box
-                            cv2.rectangle(frame, hb_sp, hb_ep, (255, 0, 255), 2)
-                            
-                            # Add passenger ID and dwell time display above head
-                            text_x = hb_sp[0]
-                            text_y = hb_sp[1] - 10
-                            
-                            # Always show passenger ID
-                            id_text = f"ID: {person_id}"
-                            id_text_size = cv2.getTextSize(id_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
-                            
-                            # Draw background rectangle for ID text
-                            cv2.rectangle(frame, 
-                                        (text_x - 5, text_y - id_text_size[1] - 5), 
-                                        (text_x + id_text_size[0] + 5, text_y + 5), 
-                                        (0, 0, 0), -1)  # Black background
-                            
-                            # Draw passenger ID text
-                            cv2.putText(frame, id_text, 
-                                      (text_x, text_y), 
-                                      cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)  # Yellow text
-                            
-                            # Add dwell time display if passenger is inside
+                    # Simple classification based on bounding box height
+                    passenger_type = "Adult" if box_height > 125 else "Child"
+
+                    # --- Passenger Counting ---
+                    if current_zone is not None:
+                        last_zone = person_last_zone.get(person_id)
+                        current_time = time.time()
+
+                        # Skip counting if person is in exit cooldown
+                        if person_id in person_exit_cooldown and current_time - person_exit_cooldown[person_id] < 3.0:
+                            continue  # Skip all counting for this person
+
+                        if current_zone == "inside" and last_zone != "inside":
+                            # Check exit cooldown: prevent re-entry for 3 seconds after exit
+                            if person_id not in person_exit_cooldown or current_time - person_exit_cooldown[person_id] > 3.0:
+                                log_passenger_entry(person_id, passenger_type)
+                                passenger_entry_times[person_id] = current_time
+                                # Clear exit cooldown on successful entry
+                                if person_id in person_exit_cooldown:
+                                    del person_exit_cooldown[person_id]
+                        elif current_zone != "inside" and last_zone == "inside":
                             if person_id in passenger_entry_times:
-                                current_time = time.time()
-                                dwell_time_seconds = current_time - passenger_entry_times[person_id]
-                                
-                                # Format display: seconds for < 1 minute, minutes:seconds for >= 1 minute
-                                if dwell_time_seconds < 60:
-                                    dwell_text = f"{int(dwell_time_seconds)}s"
-                                else:
-                                    minutes = int(dwell_time_seconds // 60)
-                                    seconds = int(dwell_time_seconds % 60)
-                                    dwell_text = f"{minutes}m{seconds}s"
-                                
-                                # Position dwell time text below ID
-                                dwell_y = text_y + 25
-                                
-                                # Draw background rectangle for dwell time text
-                                dwell_text_size = cv2.getTextSize(dwell_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
-                                cv2.rectangle(frame, 
-                                            (text_x - 5, dwell_y - dwell_text_size[1] - 5), 
-                                            (text_x + dwell_text_size[0] + 5, dwell_y + 5), 
-                                            (0, 0, 0), -1)  # Black background
-                                
-                                # Draw dwell time text
-                                cv2.putText(frame, dwell_text, 
-                                          (text_x, dwell_y), 
-                                          cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)  # Green text
-                            
-                            # Cache head box for skipped frames
-                            new_boxes.append((hb_sp, hb_ep))
-
-                        # Minimal classification to keep logging working
-                        box_height = end_point[1] - start_point[1]
-                        passenger_type = classify_passenger(person_keypoints, box_height)
-                        # posture = classify_posture(person_keypoints, posture_threshold) # Removed as per edit hint
-
-                        # --- Passenger Counting ---
-                        if current_zone is not None:
-                            last_zone = person_last_zone.get(person_id)
-                            current_time = time.time()
-
-                            # Skip counting if person is in exit cooldown
-                            if person_id in person_exit_cooldown and current_time - person_exit_cooldown[person_id] < 3.0:
-                                continue  # Skip all counting for this person
-
-                            if current_zone == "inside" and last_zone != "inside":
-                                # Check exit cooldown: prevent re-entry for 3 seconds after exit
-                                if person_id not in person_exit_cooldown or current_time - person_exit_cooldown[person_id] > 3.0:
-                                    log_passenger_entry(person_id, passenger_type)
-                                    passenger_entry_times[person_id] = current_time
-                                    # Clear exit cooldown on successful entry
-                                    if person_id in person_exit_cooldown:
-                                        del person_exit_cooldown[person_id]
-                            elif current_zone != "inside" and last_zone == "inside":
-                                if person_id in passenger_entry_times:
-                                    dwell_time_seconds = current_time - passenger_entry_times.pop(person_id)
-                                    log_passenger_exit(person_id, dwell_time_seconds)
-                                    # Record exit time for debouncing
-                                    exit_debounce[person_id] = current_time
+                                dwell_time_seconds = current_time - passenger_entry_times.pop(person_id)
+                                log_passenger_exit(person_id, dwell_time_seconds)
+                                # Record exit time for debouncing
+                                exit_debounce[person_id] = current_time
                     
                     # Update person's last known zone
                     if current_zone is not None:
@@ -857,6 +765,6 @@ def run_detection(model):
     cv2.destroyAllWindows()
 
 if __name__ == '__main__':
-    # Load the YOLOv8 pose estimation model
-    model = YOLO('yolov8n-pose.pt')
+    # Load the YOLOv8 detection model
+    model = YOLO('yolov8n.pt')
     run_detection(model) 
