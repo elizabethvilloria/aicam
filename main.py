@@ -188,8 +188,8 @@ def run_detection(model):
         if PICAMERA2_AVAILABLE:
             try:
                 picam2 = Picamera2()
-                # Use a modest resolution for performance on Pi
-                video_config = picam2.create_video_configuration(main={"size": (640, 480)})
+                # Use optimized resolution for Pi performance
+                video_config = picam2.create_video_configuration(main={"size": (480, 360)})
                 picam2.configure(video_config)
                 picam2.start()
                 time.sleep(0.5)  # warm-up
@@ -218,8 +218,8 @@ def run_detection(model):
                     'rpicam-still', 
                     '-o', temp_image_path,
                     '-t', '1000',  # 1 second timeout
-                    '--width', '640',
-                    '--height', '480'
+                    '--width', '480',
+                    '--height', '360'
                 ], capture_output=True, timeout=10)
                 
                 if result.returncode == 0 and os.path.exists(temp_image_path):
@@ -383,8 +383,8 @@ def run_detection(model):
                         'rpicam-still', 
                         '-o', temp_image_path,
                         '-t', '100',
-                        '--width', '640',
-                        '--height', '480',
+                        '--width', '480',
+                        '--height', '360',
                         '--nopreview'
                     ], capture_output=True, timeout=2)
                     
@@ -438,16 +438,19 @@ def run_detection(model):
         # Pi 5 can handle every frame for 9 people
         did_infer = False
         if shared_state['dragging_line'] is None:
-            # Run YOLOv8 tracking on every frame - optimized for Pi 5 and 9 people
+            # Run YOLOv8 tracking optimized for Pi performance
             results = model.track(
                 frame,
                 persist=True,
                 verbose=False,
                 device="cpu",
                 tracker="bytetrack.yaml",
-                imgsz=640,
-                conf=0.6,
-                max_det=15
+                imgsz=480,  # Reduced from 640 for better Pi performance
+                conf=0.5,   # Lower confidence for better detection
+                max_det=15, # Reasonable detection limit
+                half=True,  # Use half precision if supported
+                iou=0.4,   # Lower IoU threshold for better NMS
+                agnostic_nms=True  # Better non-maximum suppression
             )
             did_infer = True
 
