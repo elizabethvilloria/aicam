@@ -529,6 +529,10 @@ def run_detection(model):
                         current_time = time.time()
                         dwell_time_seconds = current_time - passenger_entry_times[person_id]
                         
+                        # DEBUG: Print dwell time calculation
+                        if frame_idx % 30 == 0:  # Every 30 frames
+                            print(f"Person {person_id}: Entry time={passenger_entry_times[person_id]:.1f}, Current={current_time:.1f}, Dwell={dwell_time_seconds:.1f}s")
+                        
                         # Format display: seconds for < 1 minute, minutes:seconds for >= 1 minute
                         if dwell_time_seconds < 60:
                             dwell_text = f"{int(dwell_time_seconds)}s"
@@ -570,8 +574,13 @@ def run_detection(model):
                         if current_zone == "inside" and last_zone != "inside":
                             # Check exit cooldown: prevent re-entry for 3 seconds after exit
                             if person_id not in person_exit_cooldown or current_time - person_exit_cooldown[person_id] > 3.0:
-                                log_passenger_entry(person_id, passenger_type)
-                                passenger_entry_times[person_id] = current_time
+                                # Only create new entry if person doesn't already have one
+                                if person_id not in passenger_entry_times:
+                                    log_passenger_entry(person_id, passenger_type)
+                                    passenger_entry_times[person_id] = current_time
+                                    print(f"NEW ENTRY: Person {person_id} entered at {current_time:.1f}")
+                                else:
+                                    print(f"REAPPEARED: Person {person_id} reappeared (keeping original entry time)")
                                 # Clear exit cooldown on successful entry
                                 if person_id in person_exit_cooldown:
                                     del person_exit_cooldown[person_id]

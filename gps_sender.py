@@ -4,7 +4,7 @@ GPS Data Sender for E-Trike Dashboard
 This script reads GPS data from VK-162 USB GPS receiver and sends it to the dashboard.
 """
 
-import serial
+from serial import Serial
 import pynmea2
 import time
 import requests
@@ -23,7 +23,7 @@ class GPSSender:
     def connect_gps(self, port="/dev/ttyUSB0", baudrate=9600):
         """Connect to VK-162 GPS receiver"""
         try:
-            self.serial_port = serial.Serial(port, baudrate, timeout=1)
+            self.serial_port = Serial(port, baudrate, timeout=1)
             print(f"✅ Connected to GPS receiver on {port}")
             return True
         except Exception as e:
