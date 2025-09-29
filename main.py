@@ -438,7 +438,7 @@ def run_detection(model):
         # Pi 5 can handle every frame for 9 people
         did_infer = False
         if shared_state['dragging_line'] is None:
-            # Run YOLOv8 tracking with improved distance detection
+            # Run YOLOv8 tracking with balanced detection
             results = model.track(
                 frame,
                 persist=True,
@@ -446,8 +446,8 @@ def run_detection(model):
                 device="cpu",
                 tracker="bytetrack.yaml",
                 imgsz=480,  # Reduced resolution for better Pi performance
-                conf=0.4,   # Lower confidence for better distance detection
-                max_det=20  # Allow more detections for crowded scenarios
+                conf=0.45,  # Balanced confidence (between 0.4 and 0.5)
+                max_det=15  # Reasonable detection limit
             )
             did_infer = True
 
@@ -455,6 +455,19 @@ def run_detection(model):
                 boxes = results[0].boxes.xywh.cpu()
                 track_ids = results[0].boxes.id.int().cpu().tolist()
                 confidences = results[0].boxes.conf.cpu().numpy()
+                
+                # Filter out false positives (tiny detections)
+                filtered_indices = []
+                for i, box in enumerate(boxes):
+                    area = box[2] * box[3]  # width * height
+                    if area > 1000 and confidences[i] > 0.45:  # Minimum area and confidence
+                        filtered_indices.append(i)
+                
+                # Use only filtered detections
+                boxes = boxes[filtered_indices]
+                track_ids = [track_ids[i] for i in filtered_indices]
+                confidences = confidences[filtered_indices]
+                
                 new_boxes = []
                 for i, box in enumerate(boxes):
                     person_id = track_ids[i]
