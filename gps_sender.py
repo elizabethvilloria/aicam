@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 GPS Data Sender for E-Trike Dashboard
-This script reads GPS data from VK-162 USB GPS receiver and sends it to the dashboard.
+This script reads GPS data from VFAN UG-353 GPS receiver and sends it to the dashboard.
 """
 
 import serial
@@ -21,7 +21,14 @@ class GPSSender:
         self.last_position = None
         
     def connect_gps(self, port="/dev/ttyUSB0", baudrate=9600):
-        """Connect to VK-162 GPS receiver"""
+        """Connect to VFAN UG-353 GPS receiver
+        
+        VFAN UG-353 specifications:
+        - Default baud rate: 9600 (can be configured)
+        - NMEA 0183 compatible
+        - Outputs GPRMC, GPGGA sentences
+        - May appear as /dev/ttyUSB0, /dev/ttyACM0, or /dev/ttyAMA0
+        """
         try:
             self.serial_port = serial.Serial(port, baudrate, timeout=1)
             print(f"✅ Connected to GPS receiver on {port}")
@@ -37,15 +44,32 @@ class GPSSender:
             
         try:
             line = self.serial_port.readline().decode('ascii', errors='ignore')
-            if line.startswith('$GPRMC'):
+            
+            # VFAN UG-353 supports multiple NMEA sentence types
+            if line.startswith('$GPRMC') or line.startswith('$GPGGA'):
                 msg = pynmea2.parse(line)
-                if msg.latitude and msg.longitude:
+                
+                # Extract coordinates based on sentence type
+                if line.startswith('$GPRMC'):
+                    # RMC sentence has latitude/longitude
+                    lat = msg.latitude
+                    lon = msg.longitude
+                    speed = float(msg.spd_over_grnd) if msg.spd_over_grnd else 0
+                    heading = float(msg.true_course) if msg.true_course else 0
+                elif line.startswith('$GPGGA'):
+                    # GGA sentence has latitude/longitude
+                    lat = msg.latitude
+                    lon = msg.longitude
+                    speed = 0  # GGA doesn't have speed
+                    heading = 0  # GGA doesn't have heading
+                
+                if lat and lon:
                     return {
                         'pi_id': self.pi_id,
-                        'latitude': float(msg.latitude),
-                        'longitude': float(msg.longitude),
-                        'speed': float(msg.spd_over_grnd) if msg.spd_over_grnd else 0,
-                        'heading': float(msg.true_course) if msg.true_course else 0,
+                        'latitude': float(lat),
+                        'longitude': float(lon),
+                        'speed': speed,
+                        'heading': heading,
                         'timestamp': int(datetime.now(pytz.timezone('Europe/Madrid')).timestamp())
                     }
         except Exception as e:
