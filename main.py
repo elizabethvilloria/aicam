@@ -438,7 +438,7 @@ def run_detection(model):
         # Pi 5 can handle every frame for 9 people
         did_infer = False
         if shared_state['dragging_line'] is None:
-            # Run YOLOv8 tracking with balanced detection
+            # Run YOLOv8 tracking with strict false positive prevention
             results = model.track(
                 frame,
                 persist=True,
@@ -446,8 +446,8 @@ def run_detection(model):
                 device="cpu",
                 tracker="bytetrack.yaml",
                 imgsz=480,  # Reduced resolution for better Pi performance
-                conf=0.45,  # Balanced confidence (between 0.4 and 0.5)
-                max_det=15  # Reasonable detection limit
+                conf=0.5,   # Higher confidence to reduce false positives
+                max_det=12  # Fewer detections to focus on quality
             )
             did_infer = True
 
@@ -456,11 +456,12 @@ def run_detection(model):
                 track_ids = results[0].boxes.id.int().cpu().tolist()
                 confidences = results[0].boxes.conf.cpu().numpy()
                 
-                # Filter out false positives (tiny detections)
+                # Filter out false positives (stricter filtering)
                 filtered_indices = []
                 for i, box in enumerate(boxes):
                     area = box[2] * box[3]  # width * height
-                    if area > 1000 and confidences[i] > 0.45:  # Minimum area and confidence
+                    # Stricter requirements: larger area and higher confidence
+                    if area > 2000 and confidences[i] > 0.5:  # Increased minimum area and confidence
                         filtered_indices.append(i)
                 
                 # Use only filtered detections
