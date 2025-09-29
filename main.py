@@ -349,7 +349,7 @@ def run_detection(model):
     person_last_zone = {}
     passenger_entry_times = {}
     person_last_seen = {}  # Track when each person was last seen
-    exit_timeout_seconds = 3  # Force exit after 3 seconds of no detection
+    exit_timeout_seconds = 8  # Force exit after 8 seconds of no detection (increased for better ID persistence)
     exit_debounce = {}  # Prevent rapid exit/entry flickering
     person_exit_cooldown = {}  # Prevent re-entry after exit
     # Cache for skipped frames to avoid flicker
@@ -619,6 +619,7 @@ def run_detection(model):
                         dwell_time_seconds = current_time - passenger_entry_times.pop(person_id)
                         log_passenger_exit(person_id, dwell_time_seconds)
                         people_to_exit.append(person_id)
+                        print(f"TIMEOUT EXIT: Person {person_id} timed out after {time_since_last_seen:.1f}s")
             
             # Remove from tracking
             for person_id in people_to_exit:
