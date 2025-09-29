@@ -438,7 +438,7 @@ def run_detection(model):
         # Pi 5 can handle every frame for 9 people
         did_infer = False
         if shared_state['dragging_line'] is None:
-            # Run YOLOv8 tracking with essential Pi optimizations
+            # Run YOLOv8 tracking with improved distance detection
             results = model.track(
                 frame,
                 persist=True,
@@ -446,8 +446,8 @@ def run_detection(model):
                 device="cpu",
                 tracker="bytetrack.yaml",
                 imgsz=480,  # Reduced resolution for better Pi performance
-                conf=0.5,   # Lower confidence for better detection
-                max_det=15
+                conf=0.4,   # Lower confidence for better distance detection
+                max_det=20  # Allow more detections for crowded scenarios
             )
             did_infer = True
 
