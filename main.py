@@ -446,7 +446,7 @@ def run_detection(model):
                 device="cpu",
                 tracker="bytetrack.yaml",
                 imgsz=480,  # Reduced resolution for better Pi performance
-                conf=0.65,   # Balanced confidence to avoid false positives but detect real people
+                conf=0.5,   # Back to original confidence - let the size filters do the work
                 max_det=15
             )
             did_infer = True
@@ -466,10 +466,10 @@ def run_detection(model):
                     
                     # Filter out false positives based on size and confidence
                     # Chairs, bags, etc. are usually too small or wrong aspect ratio
-                    min_person_height = 60   # Minimum height for a person (pixels) - reduced
-                    max_person_height = 400  # Maximum height for a person (pixels) - increased
-                    min_person_width = 30    # Minimum width for a person (pixels) - reduced
-                    max_person_width = 250   # Maximum width for a person (pixels) - increased
+                    min_person_height = 40   # Minimum height for a person (pixels) - very lenient
+                    max_person_height = 500  # Maximum height for a person (pixels) - very lenient
+                    min_person_width = 20    # Minimum width for a person (pixels) - very lenient
+                    max_person_width = 300   # Maximum width for a person (pixels) - very lenient
                     
                     # Skip if too small (likely chair, bag, etc.)
                     if box_height < min_person_height or box_width < min_person_width:
@@ -482,14 +482,14 @@ def run_detection(model):
                         continue
                     
                     # Skip if confidence is still too low even after model filtering
-                    if confidence < 0.55:  # Slightly lowered from 0.6
+                    if confidence < 0.4:  # Very lenient - only reject obvious false positives
                         print(f"❌ Rejected low confidence: ID {person_id}, conf {confidence:.2f}")
                         continue
                     
                     # Filter by aspect ratio - people are taller than wide, chairs are wider than tall
                     aspect_ratio = box_height / box_width
-                    min_aspect_ratio = 1.0  # People are at least as tall as wide (more lenient)
-                    max_aspect_ratio = 5.0  # People aren't extremely tall/thin (more lenient)
+                    min_aspect_ratio = 0.7  # Very lenient - people can be wider than tall
+                    max_aspect_ratio = 6.0  # Very lenient - allow very tall/thin people
                     
                     if aspect_ratio < min_aspect_ratio:
                         print(f"❌ Rejected wrong aspect ratio: ID {person_id}, ratio {aspect_ratio:.2f} (too wide)")
