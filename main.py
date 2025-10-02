@@ -349,7 +349,7 @@ def run_detection(model):
     person_last_zone = {}
     passenger_entry_times = {}
     person_last_seen = {}  # Track when each person was last seen
-    exit_timeout_seconds = 8  # Force exit after 8 seconds of no detection (increased for better ID persistence)
+    exit_timeout_seconds = 15  # Force exit after 15 seconds of no detection (increased for better ID persistence)
     exit_debounce = {}  # Prevent rapid exit/entry flickering
     person_exit_cooldown = {}  # Prevent re-entry after exit
     # Cache for skipped frames to avoid flicker
@@ -573,15 +573,15 @@ def run_detection(model):
                             continue  # Skip all counting for this person
 
                         if current_zone == "inside" and last_zone != "inside":
-                            # Check exit cooldown: prevent re-entry for 3 seconds after exit
-                            if person_id not in person_exit_cooldown or current_time - person_exit_cooldown[person_id] > 3.0:
+                            # Check exit cooldown: prevent re-entry for 5 seconds after exit
+                            if person_id not in person_exit_cooldown or current_time - person_exit_cooldown[person_id] > 5.0:
                                 # Only create new entry if person doesn't already have one
                                 if person_id not in passenger_entry_times:
                                     log_passenger_entry(person_id, passenger_type)
                                     passenger_entry_times[person_id] = current_time
-                                    print(f"NEW ENTRY: Person {person_id} entered at {current_time:.1f}")
+                                    print(f"✅ NEW ENTRY: Person {person_id} entered at {current_time:.1f}")
                                 else:
-                                    print(f"REAPPEARED: Person {person_id} reappeared (keeping original entry time)")
+                                    print(f"🔄 REAPPEARED: Person {person_id} reappeared (keeping original entry time)")
                                 # Clear exit cooldown on successful entry
                                 if person_id in person_exit_cooldown:
                                     del person_exit_cooldown[person_id]
@@ -591,6 +591,7 @@ def run_detection(model):
                                 log_passenger_exit(person_id, dwell_time_seconds)
                                 # Record exit time for debouncing
                                 exit_debounce[person_id] = current_time
+                                print(f"❌ EXIT: Person {person_id} exited after {dwell_time_seconds:.1f}s (zone: {last_zone} -> {current_zone})")
                     
                     # Update person's last known zone
                     if current_zone is not None:
