@@ -778,5 +778,5 @@ def run_detection(model):
 
 if __name__ == '__main__':
     # Load the YOLOv8 detection model
-    model = YOLO('yolov8n.pt')
+    model = YOLO('yolov8s.pt')
     run_detection(model) 
