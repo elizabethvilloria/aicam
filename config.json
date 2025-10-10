@@ -48,8 +48,8 @@
             255
         ]
     },
-    "side_margin": 61,
-    "bottom_margin": 68,
+    "side_margin": 10,
+    "bottom_margin": 28,
     "flip_horizontal": false,
     "flip_vertical": false
 }
