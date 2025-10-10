@@ -37,6 +37,11 @@ Thumbs.db
 
 # Logs
 *.log
+logs/
+
+# Runtime state files
+ingest_state.json
+historical_summary.json
 
 # Temporary files
 *.tmp
