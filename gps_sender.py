@@ -1,17 +1,35 @@
 #!/usr/bin/env python3
 """
 GPS Data Sender for E-Trike Dashboard
-This script reads GPS data from VFAN UG-353 GPS receiver and sends it to the dashboard.
+This script reads GPS data from VK-162 USB GPS receiver and sends it to the dashboard.
 """
 
-import serial
-import pynmea2
 import time
 import requests
 import json
 import sys
 from datetime import datetime
 import pytz
+
+# Import serial with better error handling
+try:
+    import serial
+    import pynmea2
+except ImportError as e:
+    print(f"❌ Import Error: {e}")
+    print("📦 Please install required packages:")
+    print("   pip install pyserial pynmea2")
+    print("   or")
+    print("   pip install -r requirements.txt")
+    sys.exit(1)
+
+# Verify serial module has Serial class
+if not hasattr(serial, 'Serial'):
+    print("❌ PySerial installation issue: 'Serial' class not found")
+    print("📦 Please reinstall PySerial:")
+    print("   pip uninstall pyserial")
+    print("   pip install pyserial")
+    sys.exit(1)
 
 class GPSSender:
     def __init__(self, pi_id, dashboard_url="https://etrikedashboard.com"):
@@ -21,18 +39,22 @@ class GPSSender:
         self.last_position = None
         
     def connect_gps(self, port="/dev/ttyUSB0", baudrate=9600):
-        """Connect to VFAN UG-353 GPS receiver
-        
-        VFAN UG-353 specifications:
-        - Default baud rate: 9600 (can be configured)
-        - NMEA 0183 compatible
-        - Outputs GPRMC, GPGGA sentences
-        - May appear as /dev/ttyUSB0, /dev/ttyACM0, or /dev/ttyAMA0
-        """
+        """Connect to VK-162 GPS receiver"""
         try:
+            # Additional verification that Serial class exists
+            if not hasattr(serial, 'Serial'):
+                print("❌ PySerial Serial class not available")
+                return False
+                
             self.serial_port = serial.Serial(port, baudrate, timeout=1)
             print(f"✅ Connected to GPS receiver on {port}")
             return True
+        except serial.SerialException as e:
+            print(f"❌ Serial connection error: {e}")
+            print(f"💡 Check if device {port} exists and is accessible")
+            print(f"💡 Try: ls -la {port}")
+            print(f"💡 Make sure user is in 'dialout' group: sudo usermod -a -G dialout $USER")
+            return False
         except Exception as e:
             print(f"❌ Failed to connect to GPS receiver: {e}")
             return False
@@ -44,32 +66,15 @@ class GPSSender:
             
         try:
             line = self.serial_port.readline().decode('ascii', errors='ignore')
-            
-            # VFAN UG-353 supports multiple NMEA sentence types
-            if line.startswith('$GPRMC') or line.startswith('$GPGGA'):
+            if line.startswith('$GPRMC'):
                 msg = pynmea2.parse(line)
-                
-                # Extract coordinates based on sentence type
-                if line.startswith('$GPRMC'):
-                    # RMC sentence has latitude/longitude
-                    lat = msg.latitude
-                    lon = msg.longitude
-                    speed = float(msg.spd_over_grnd) if msg.spd_over_grnd else 0
-                    heading = float(msg.true_course) if msg.true_course else 0
-                elif line.startswith('$GPGGA'):
-                    # GGA sentence has latitude/longitude
-                    lat = msg.latitude
-                    lon = msg.longitude
-                    speed = 0  # GGA doesn't have speed
-                    heading = 0  # GGA doesn't have heading
-                
-                if lat and lon:
+                if msg.latitude and msg.longitude:
                     return {
                         'pi_id': self.pi_id,
-                        'latitude': float(lat),
-                        'longitude': float(lon),
-                        'speed': speed,
-                        'heading': heading,
+                        'latitude': float(msg.latitude),
+                        'longitude': float(msg.longitude),
+                        'speed': float(msg.spd_over_grnd) if msg.spd_over_grnd else 0,
+                        'heading': float(msg.true_course) if msg.true_course else 0,
                         'timestamp': int(datetime.now(pytz.timezone('Europe/Madrid')).timestamp())
                     }
         except Exception as e:
