@@ -4,6 +4,7 @@ import datetime
 from ultralytics import YOLO
 import os
 import json
+import numpy as np
 from collections import defaultdict
 
 # Optional: Picamera2 for Raspberry Pi camera support
@@ -23,6 +24,32 @@ except Exception:
 
 CONFIG_FILE = "config.json"
 LOG_DIR = "logs"
+
+def correct_fisheye_distortion(frame, strength=0.3):
+    """
+    Apply fisheye lens correction to reduce barrel distortion.
+    strength: 0.0 = no correction, 1.0 = maximum correction
+    """
+    if frame is None:
+        return frame
+    
+    height, width = frame.shape[:2]
+    
+    # Create fisheye correction map
+    # These parameters can be calibrated for your specific camera
+    K = np.array([[width * 0.7, 0, width / 2],
+                  [0, height * 0.7, height / 2],
+                  [0, 0, 1]], dtype=np.float32)
+    
+    D = np.array([strength * 0.1, 0, 0, 0], dtype=np.float32)  # Distortion coefficients
+    
+    # Generate correction maps
+    map1, map2 = cv2.fisheye.initUndistortRectifyMap(K, D, np.eye(3), K, (width, height), cv2.CV_16SC2)
+    
+    # Apply correction
+    corrected_frame = cv2.remap(frame, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+    
+    return corrected_frame
 
 def load_config():
     """Load configuration from config.json file."""
@@ -173,6 +200,25 @@ def run_detection(model):
             if not temp_cap.isOpened():
                 temp_cap.release()
                 continue
+            
+            # Configure camera settings from config
+            camera_settings = config.get('camera_settings', {})
+            temp_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+            temp_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+            temp_cap.set(cv2.CAP_PROP_FPS, 30)
+            temp_cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.75)  # Auto exposure for better focus
+            
+            # Apply configurable camera settings with better defaults
+            temp_cap.set(cv2.CAP_PROP_EXPOSURE, camera_settings.get('exposure', -3))  # Less aggressive exposure
+            temp_cap.set(cv2.CAP_PROP_GAIN, camera_settings.get('gain', 50))  # Lower gain for less noise
+            temp_cap.set(cv2.CAP_PROP_WHITE_BALANCE_BLUE_U, camera_settings.get('white_balance_blue', 200))
+            temp_cap.set(cv2.CAP_PROP_WHITE_BALANCE_RED_V, camera_settings.get('white_balance_red', 200))
+            temp_cap.set(cv2.CAP_PROP_BRIGHTNESS, camera_settings.get('brightness', 50))
+            temp_cap.set(cv2.CAP_PROP_CONTRAST, camera_settings.get('contrast', 50))
+            
+            # Enable autofocus if available
+            temp_cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)
+            
             ok, temp_frame = temp_cap.read()
             if ok and temp_frame is not None:
                 return temp_cap, temp_frame, idx
@@ -188,9 +234,16 @@ def run_detection(model):
         if PICAMERA2_AVAILABLE:
             try:
                 picam2 = Picamera2()
-                # Use optimized resolution for Pi performance
-                video_config = picam2.create_video_configuration(main={"size": (480, 360)})
+                # Use higher resolution for better image quality
+                video_config = picam2.create_video_configuration(main={"size": (1280, 720)})
                 picam2.configure(video_config)
+                
+                # Enable autofocus for Camera Module 3 Wide
+                try:
+                    picam2.set_controls({"AfMode": 1, "AfTrigger": 0})  # Continuous autofocus
+                    print("✅ Autofocus enabled for Camera Module 3 Wide")
+                except Exception as e:
+                    print(f"⚠️ Could not enable autofocus: {e}")
                 picam2.start()
                 time.sleep(0.5)  # warm-up
                 frame = picam2.capture_array()
@@ -421,6 +474,12 @@ def run_detection(model):
             frame = cv2.flip(frame, 1)
         elif flip_vertical:
             frame = cv2.flip(frame, 0)
+        
+        # Apply fisheye correction if enabled
+        fisheye_correction = config.get('fisheye_correction', False)
+        fisheye_strength = config.get('fisheye_strength', 0.3)
+        if fisheye_correction:
+            frame = correct_fisheye_distortion(frame, fisheye_strength)
 
         # Update FPS (EMA smoothing)
         now_t = time.time()
@@ -435,23 +494,28 @@ def run_detection(model):
         passengers_in_trike_count = 0
 
         # Pause AI model during drag to keep UI responsive
-        # Pi 5 can handle every frame for 9 people
+        # Optimize processing for better FPS on Pi
         did_infer = False
+        results = None
         if shared_state['dragging_line'] is None:
-            # Run YOLOv8 tracking with strict false positive prevention
-            results = model.track(
-                frame,
-                persist=True,
-                verbose=False,
-                device="cpu",
-                tracker="bytetrack.yaml",
-                imgsz=480,  # Reduced resolution for better Pi performance
-                conf=0.6,   # Higher confidence to reduce false positives
-                max_det=15  # Fewer detections to focus on quality
-            )
-            did_infer = True
+            # Skip processing every other frame for better FPS
+            if frame_idx % 2 == 0:  # Process every 2nd frame
+                # Run YOLOv8 tracking with optimized settings
+                results = model.track(
+                    frame,
+                    persist=True,
+                    verbose=False,
+                    device="cpu",
+                    tracker="bytetrack.yaml",
+                    imgsz=416,  # Further reduced resolution for better Pi performance
+                    conf=0.7,   # Higher confidence to reduce false positives
+                    max_det=10,  # Fewer detections to focus on quality
+                    half=True,   # Use half precision for faster inference
+                    agnostic_nms=True  # Faster NMS
+                )
+                did_infer = True
 
-            if results and results[0].boxes is not None and results[0].boxes.id is not None:
+        if results and results[0].boxes is not None and results[0].boxes.id is not None:
                 boxes = results[0].boxes.xywh.cpu()
                 track_ids = results[0].boxes.id.int().cpu().tolist()
                 confidences = results[0].boxes.conf.cpu().numpy()
@@ -514,65 +578,38 @@ def run_detection(model):
                             current_zone = "inside"
                             passengers_in_trike_count += 1
 
-                    # --- Simple bounding box drawing ---
-                    # Draw bounding box around person
-                    start_point = (int(center_x - box_width/2), int(center_y - box_height/2))
-                    end_point = (int(center_x + box_width/2), int(center_y + box_height/2))
-                    cv2.rectangle(frame, start_point, end_point, (255, 0, 255), 2)
+                    # --- Compact person indicator ---
+                    # Small circle at person's center point
+                    cv2.circle(frame, (int(center_x), int(center_y)), 8, (255, 0, 255), -1)  # Filled circle
+                    cv2.circle(frame, (int(center_x), int(center_y)), 10, (255, 255, 255), 2)  # White outline
                     
-                    # Add passenger ID and dwell time display
-                    text_x = start_point[0]
-                    text_y = start_point[1] - 10
+                    # Small ID label positioned above the circle
+                    id_text = f"{person_id}"
+                    text_x = int(center_x) - 10
+                    text_y = int(center_y) - 15
                     
-                    # Always show passenger ID
-                    id_text = f"ID: {person_id}"
-                    id_text_size = cv2.getTextSize(id_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
-                    
-                    # Draw background rectangle for ID text
+                    # Draw small background rectangle for ID
                     cv2.rectangle(frame, 
-                                (text_x - 5, text_y - id_text_size[1] - 5), 
-                                (text_x + id_text_size[0] + 5, text_y + 5), 
+                                (text_x - 3, text_y - 12), 
+                                (text_x + 20, text_y + 2), 
                                 (0, 0, 0), -1)  # Black background
                     
-                    # Draw passenger ID text
+                    # Draw ID text
                     cv2.putText(frame, id_text, 
                               (text_x, text_y), 
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)  # Yellow text
+                              cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 0), 1)  # Small yellow text
                     
-                    # Add dwell time display if passenger is inside
+                    # Keep dwell time tracking for logging but don't display it
                     if person_id in passenger_entry_times:
                         current_time = time.time()
                         dwell_time_seconds = current_time - passenger_entry_times[person_id]
                         
-                        # DEBUG: Print dwell time calculation
+                        # DEBUG: Print dwell time calculation (only in console)
                         if frame_idx % 30 == 0:  # Every 30 frames
                             print(f"Person {person_id}: Entry time={passenger_entry_times[person_id]:.1f}, Current={current_time:.1f}, Dwell={dwell_time_seconds:.1f}s")
-                        
-                        # Format display: seconds for < 1 minute, minutes:seconds for >= 1 minute
-                        if dwell_time_seconds < 60:
-                            dwell_text = f"{int(dwell_time_seconds)}s"
-                        else:
-                            minutes = int(dwell_time_seconds // 60)
-                            seconds = int(dwell_time_seconds % 60)
-                            dwell_text = f"{minutes}m{seconds}s"
-                        
-                        # Position dwell time text below ID
-                        dwell_y = text_y + 25
-                        
-                        # Draw background rectangle for dwell time text
-                        dwell_text_size = cv2.getTextSize(dwell_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
-                        cv2.rectangle(frame, 
-                                    (text_x - 5, dwell_y - dwell_text_size[1] - 5), 
-                                    (text_x + dwell_text_size[0] + 5, dwell_y + 5), 
-                                    (0, 0, 0), -1)  # Black background
-                        
-                        # Draw dwell time text
-                        cv2.putText(frame, dwell_text, 
-                                  (text_x, dwell_y), 
-                                  cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)  # Green text
                     
-                    # Cache bounding box for skipped frames
-                    new_boxes.append((start_point, end_point))
+                    # Cache circle position for skipped frames
+                    new_boxes.append(((int(center_x), int(center_y)), 8))  # (center, radius)
 
                     # Simple classification based on bounding box height
                     passenger_type = "Adult" if box_height > 125 else "Child"
@@ -644,17 +681,18 @@ def run_detection(model):
                 if person_id in person_last_seen:
                     del person_last_seen[person_id]
 
-        # If we skipped inference this frame, draw last known boxes to avoid flicker
+        # If we skipped inference this frame, draw last known circles to avoid flicker
         if not did_infer and latest_boxes:
-            # Only draw boxes for 1 frame after detection stops
+            # Only draw circles for 1 frame after detection stops
             if not hasattr(run_detection, 'last_detection_frame'):
                 run_detection.last_detection_frame = 0
             
             if frame_idx - run_detection.last_detection_frame < 2:  # Only 2 frames
-                for (sp, ep) in latest_boxes:
-                    cv2.rectangle(frame, sp, ep, (255, 0, 255), 2)
+                for (center, radius) in latest_boxes:
+                    cv2.circle(frame, center, radius, (255, 0, 255), -1)  # Filled circle
+                    cv2.circle(frame, center, radius + 2, (255, 255, 255), 2)  # White outline
             else:
-                # Clear boxes if no detection for 2+ frames
+                # Clear circles if no detection for 2+ frames
                 latest_boxes = []
 
         # --- Draw Zones ---

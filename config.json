@@ -51,5 +51,13 @@
     "side_margin": 10,
     "bottom_margin": 28,
     "flip_horizontal": false,
-    "flip_vertical": false
+    "flip_vertical": false,
+    "camera_settings": {
+        "exposure": -3,
+        "gain": 50,
+        "white_balance_blue": 200,
+        "white_balance_red": 200,
+        "brightness": 50,
+        "contrast": 50
+    }
 }
