@@ -657,8 +657,8 @@ def run_detection(model):
                 
                 # Update last detection frame
                 run_detection.last_detection_frame = frame_idx
-            else:
-                pass  # No detections this frame
+        else:
+            pass  # No detections this frame
             
             # Force exit people who haven't been seen for too long
             current_time = time.time()
